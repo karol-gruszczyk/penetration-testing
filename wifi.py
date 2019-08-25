@@ -6,9 +6,11 @@ import subprocess
 import typing as t
 from datetime import datetime, timedelta
 
+import urwid
+
 from aircrack.airmon import Airmon
 from aircrack.airodump import Airodump, AccessPoint
-from aircrack.models import WifiCard
+from aircrack.models import WifiAdapter
 
 
 def get_yes_no(message: str, *, default: bool = False) -> bool:
@@ -21,8 +23,8 @@ def get_yes_no(message: str, *, default: bool = False) -> bool:
     return answer == 'y'
 
 
-def select_wifi_card() -> WifiCard:
-    wifi_cards: t.Dict[str, WifiCard] = {i.interface: i for i in Airmon.get_wifi_cards()}
+def select_wifi_card() -> WifiAdapter:
+    wifi_cards: t.Dict[str, WifiAdapter] = {i.interface: i for i in Airmon.get_wifi_adapters()}
 
     for wifi_card in wifi_cards.values():
         if wifi_card.monitoring_enabled:
@@ -50,7 +52,7 @@ def is_viable_target(access_point: AccessPoint):
     )
 
 
-async def listen_for_networks(wifi_card: WifiCard, wait: timedelta = timedelta(minutes=1)):
+async def listen_for_networks(wifi_card: WifiAdapter, wait: timedelta = timedelta(minutes=1)):
     if not wifi_card.monitoring_enabled:
         Airmon.start_monitoring(wifi_card)
 
@@ -69,7 +71,7 @@ async def listen_for_networks(wifi_card: WifiCard, wait: timedelta = timedelta(m
             return access_points
 
 
-async def listen_network(wifi_card: WifiCard, access_point: AccessPoint) -> str:
+async def listen_network(wifi_card: WifiAdapter, access_point: AccessPoint) -> str:
     async for access_points in Airodump(wifi_card.interface, access_point=access_point).stream_data():
         os.system('clear')
         print(f'Listening to network: {access_point.essid} ...')

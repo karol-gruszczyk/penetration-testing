@@ -1,7 +1,9 @@
-.idea
+*
+!/**/
+
+!*.py
+!*.c
+!*.md
+!Makefile
 
 venv
-__pycache__*
-
-.airodump-ng
-

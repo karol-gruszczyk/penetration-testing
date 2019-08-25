@@ -1,7 +1,7 @@
 import shlex
 import subprocess
 
-from aircrack.models import WifiCard, Station
+from aircrack.models import WifiAdapter, Station
 
 
 class Aireplay:
@@ -9,7 +9,7 @@ class Aireplay:
         pass
 
     @classmethod
-    def send_deauth(cls, wifi_card: WifiCard, station: Station, count: int = 10):
+    def send_deauth(cls, wifi_card: WifiAdapter, station: Station, count: int = 10):
         subprocess.call(shlex.split(
             f'aireplay-ng {wifi_card.interface} --deauth {count} -a {station.bssid} -c {station.station_mac}'
         ))

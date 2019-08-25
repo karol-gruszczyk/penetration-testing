@@ -4,6 +4,7 @@ import io
 import os
 import shlex
 import subprocess
+import time
 import typing as t
 from datetime import datetime
 
@@ -13,33 +14,38 @@ from .models import AccessPoint, Station
 class Airodump:
     def __init__(self, interface: str, access_point: AccessPoint = None):
         self.interface = interface
-        self.prefix = f'.airodump-ng/{self.interface}'
-        if access_point:
-            self.prefix = f'{self.prefix}_{access_point.essid}'
-        command = f'airodump-ng {self.interface} --output-format=csv --write {self.prefix}'
-        if access_point:
-            command = f'{command} --bssid {access_point.bssid} --channel {access_point.channel}'
-        self.process = subprocess.Popen(shlex.split(command), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.prefix = f'.aircrack-ng/{self.interface}'
 
-    async def stream_data(self, refresh: float = 1) -> t.AsyncIterator[t.List[AccessPoint]]:
         dirname = os.path.dirname(self.prefix)
-
         if not os.path.exists(dirname):
             os.mkdir(dirname)
 
-        def get_latest_file() -> t.Optional[str]:
-            files = [
-                name for name in os.listdir(dirname)
-                if name.startswith(f'{os.path.basename(self.prefix)}-')
-                   and os.path.getsize(os.path.join(dirname, name))
-            ]
-            if files:
-                return os.path.join(dirname, sorted(files, reverse=True)[0])
+        if access_point:
+            self.prefix = f'{self.prefix}_{access_point.essid}'
+        command = f'airodump-ng {self.interface} --write {self.prefix}'
+        if access_point:
+            command = f'{command} --bssid {access_point.bssid} --channel {access_point.channel}'
+        self.process = subprocess.Popen(shlex.split(command), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
-        existing_latest = get_latest_file()
+    def fetch(self) -> t.Optional[t.List[AccessPoint]]:
+        file = self.get_latest_file()
+        if file:
+            return self.parse_file(file)
 
+    def get_latest_file(self, extension: str = '.csv') -> t.Optional[str]:
+        dirname = os.path.dirname(self.prefix)
+        basenames = {
+            name.split('.', 1)[0] for name in os.listdir(dirname)
+            if name.startswith(f'{os.path.basename(self.prefix)}-')
+            and os.path.getsize(os.path.join(dirname, name))
+        }
+        if basenames:
+            return os.path.join(dirname, sorted(basenames, reverse=True)[0] + extension)
+
+    async def stream_data(self, refresh: float = 1) -> t.AsyncIterator[t.List[AccessPoint]]:
+        existing_latest = self.get_latest_file()
         while self.process.poll() is None or True:
-            latest = get_latest_file()
+            latest = self.get_latest_file()
             if latest and latest != existing_latest:
                 yield self.parse_file(latest)
             await asyncio.sleep(refresh)
@@ -99,9 +105,3 @@ class Airodump:
 
     def __del__(self):
         self.process.terminate()
-
-
-if __name__ == '__main__':
-    from pprint import pprint
-
-    pprint(Airodump.parse_file('dump.csv'))

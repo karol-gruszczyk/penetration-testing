@@ -4,11 +4,11 @@ import typing as t
 
 
 @dataclasses.dataclass()
-class WifiCard:
+class WifiAdapter:
     phy: str
     interface: str
-    chipset: str
     driver: str
+    chipset: str
 
     def __str__(self) -> str:
         return '\t'.join(f'{field.name}: {getattr(self, field.name)}' for field in dataclasses.fields(self))
@@ -36,6 +36,14 @@ class AccessPoint:
     essid: str
     key: str
     stations: t.List = dataclasses.field(default_factory=list)
+
+    @property
+    def num_stations(self) -> int:
+        return len(self.stations)
+
+    @property
+    def power_percentage(self) -> int:
+        return round(self.power)
 
 
 @dataclasses.dataclass()
