@@ -3,6 +3,7 @@
 
 !*.py
 !*.c
+!*.sh
 !*.md
 !Makefile
 
