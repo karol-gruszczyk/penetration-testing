@@ -61,7 +61,8 @@ class Airodump:
         [...]
         """
         with open(path, 'r') as file:
-            lines = file.read().strip().split('\n')
+            output = file.read().strip()
+            lines = output.split('\n')
             stripped = '\n'.join(','.join(i.strip() for i in line.split(',')) for line in lines)
             access_points, stations = stripped.split('\n\n')
             access_points_reader = csv.DictReader(io.StringIO(access_points))

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 from datetime import datetime
 import typing as t
@@ -35,7 +37,7 @@ class AccessPoint:
     id_length: int
     essid: str
     key: str
-    stations: t.List = dataclasses.field(default_factory=list)
+    stations: t.List[Station] = dataclasses.field(default_factory=list)
 
     @property
     def num_stations(self) -> int:

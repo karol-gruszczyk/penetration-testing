@@ -8,4 +8,4 @@
 # Packages
 
 - `aircrack-ng`
-
+- `cowpatty`
