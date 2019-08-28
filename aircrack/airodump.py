@@ -4,7 +4,6 @@ import io
 import os
 import shlex
 import subprocess
-import time
 import typing as t
 from datetime import datetime
 
@@ -13,6 +12,9 @@ from .models import AccessPoint, Station
 
 class Airodump:
     def __init__(self, interface: str, access_point: AccessPoint = None):
+        if not os.path.exists('.aircrack-ng'):
+            os.mkdir('.aircrack-ng')
+        self.logs = open('.aircrack-ng/aircrack-ng.txt', 'w')
         self.interface = interface
         self.prefix = f'.aircrack-ng/{self.interface}'
 
@@ -26,6 +28,10 @@ class Airodump:
         if access_point:
             command = f'{command} --bssid {access_point.bssid} --channel {access_point.channel}'
         self.process = subprocess.Popen(shlex.split(command), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+
+    def __del__(self):
+        self.process.terminate()
+        self.logs.close()
 
     def fetch(self) -> t.Optional[t.List[AccessPoint]]:
         file = self.get_latest_file()
@@ -103,6 +109,3 @@ class Airodump:
                     probed_essids=row['Probed ESSIDs'],
                 ))
             return list(access_points.values())
-
-    def __del__(self):
-        self.process.terminate()

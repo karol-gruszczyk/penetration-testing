@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 from datetime import datetime
 import typing as t
 
@@ -18,6 +19,9 @@ class WifiAdapter:
     @property
     def monitoring_enabled(self) -> bool:
         return self.interface.endswith('mon')
+
+def _db_to_percentage(power: float) -> float:
+    return 100 * math.log(power)
 
 
 @dataclasses.dataclass()
@@ -44,8 +48,8 @@ class AccessPoint:
         return len(self.stations)
 
     @property
-    def power_percentage(self) -> int:
-        return round(self.power)
+    def power_human(self) -> str:
+        return '???' if self.power == -1 else f'{100 - abs(round(self.power))}%'
 
 
 @dataclasses.dataclass()
@@ -57,3 +61,7 @@ class Station:
     packets: int
     bssid: int
     probed_essids: str
+
+    @property
+    def power_human(self) -> str:
+        return '???' if self.power == '-1' else f'{100 - abs(round(self.power))}%'

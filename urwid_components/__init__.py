@@ -27,11 +27,12 @@ class StyledButton(urwid.WidgetWrap):
 
 class Dialog(urwid.WidgetWrap):
     def __init__(self, body, message, title):
+        self.message_widget = urwid.Text(message, align=urwid.CENTER)
         frame = urwid.Frame(
             header=urwid.Pile(
                 [
                     urwid.Divider(),
-                    urwid.Text(message, align=urwid.CENTER),
+                    self.message_widget,
                     urwid.Divider(),
                 ]
             ),
@@ -39,6 +40,9 @@ class Dialog(urwid.WidgetWrap):
         )
         widget = urwid.LineBox(urwid.Padding(frame, left=2, right=2), title=title)
         super().__init__(widget)
+
+    def set_message(self, message: str):
+        self.message_widget.set_text(message)
 
 
 class OkDialog(urwid.WidgetWrap):

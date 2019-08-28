@@ -15,7 +15,7 @@ from aircrack.airodump import Airodump
 from aircrack.cowpatty import Cowpatty
 from aircrack.models import WifiAdapter, AccessPoint, Station
 
-from urwid_components import SimpleButton, OkDialog
+from urwid_components import SimpleButton, OkDialog, StyledButton, Dialog
 
 PALETTE = [
     ('banner', 'dark red', ''),
@@ -115,6 +115,32 @@ class SelectableListView(urwid.WidgetWrap):
         pass
 
 
+class DeAuthDialog(urwid.WidgetWrap):
+    def __init__(self, parent: urwid.Widget, loop: urwid.MainLoop, adapter: WifiAdapter, station: Station, count: int):
+        self.loop = loop
+        self.adapter = adapter
+        body = urwid.Filler(StyledButton("OK", on_press=self.close))
+        self.dialog = Dialog(
+            body,
+            message=f'Sending {count} deauth packets for MAC:[{station.station_mac}]',
+            title='aireplay-ng',
+        )
+        widget = urwid.Overlay(
+            self.dialog, parent, align=urwid.CENTER, valign=urwid.MIDDLE, width=40, height=10
+        )
+        self.aireplay = Aireplay(wifi_adapter=self.adapter, station=station, count=count)
+        super().__init__(widget)
+        self.loop.set_alarm_in(1, self.update_progress, None)
+
+    def update_progress(self):
+        print('LOL')
+        self.dialog.set_message(f'lefhisubgvpergbip {self.aireplay.fetch_progress()}')
+        self.loop.set_alarm_in(1, self.update_progress, None)
+
+    def close(self, button):
+        self.loop.widget = self._w.bottom_w
+
+
 class NetworkScreen(SelectableListView):
     def __init__(self, loop: urwid.MainLoop, adapter: WifiAdapter, network: AccessPoint):
         self.adapter = adapter
@@ -125,10 +151,10 @@ class NetworkScreen(SelectableListView):
         super().__init__(
             loop,
             elements=[],
-            title=f'{self.network.essid}[{self.network.bssid}]: available targets',
+            title=f'{self.network.essid}[{self.network.bssid}]',
             columns=['BSSID', 'MAC', 'Power', 'Packets'],
-            fields=['bssid', 'station_mac', 'power', 'packets'],
-            sort_by='power',
+            fields=['bssid', 'station_mac', 'power_human', 'packets'],
+            sort_by='power_human',
         )
         self.loop.set_alarm_in(1, self.fetch_network, None)
 
@@ -176,9 +202,9 @@ class NetworkListScreen(SelectableListView):
             loop,
             elements=[],
             title='Available Networks',
-            columns=['BSSID', 'ESSID', 'Channel', 'Stations', 'Power', 'Privacy', 'Cipher', 'Authentication'],
-            fields=['bssid', 'essid', 'channel', 'num_stations', 'power', 'privacy', 'cipher', 'authentication'],
-            sort_by='power',
+            columns=['BSSID', 'ESSID', 'Channel', 'Stations', 'Power', 'Speed', 'Privacy', 'Cipher', 'Authentication'],
+            fields=['bssid', 'essid', 'channel', 'num_stations', 'power_human', 'speed', 'privacy', 'cipher', 'authentication'],
+            sort_by='power_human',
         )
         self.loop.set_alarm_in(1, self.fetch_networks, None)
 
